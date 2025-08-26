@@ -1,10 +1,20 @@
-import { DEFAULT_LOCATION } from '../defaultLocation.js';
-import { fetchSolarWindHistory } from '../aurora/fetchSolarWind.js';
-import { calculateGeomagneticScore } from '../aurora/calculateGeomagneticScore.js';
+import { DEFAULT_LOCATION } from '../default-Location.js';
+import { fetchSolarWindHistory } from '../aurora/fetch-solar-wind.js';
+import { calculateGeomagneticScore } from '../aurora/calculate-geomagnetic-score.js';
 import { getMoonData } from '../astro/moon.js';
 import { getWeatherData } from '../astro/weather.js';
 import { calculateSightability } from '../astro/sightability.js';
-import { saveData } from '../db/saveData.js';
+import { saveData } from '../db/savedata.js';
+
+import { CONFIG } from '../../config/app-config.js';
+
+const L = CONFIG.solarWind.suspectLimits;
+
+const bad =
+  (row.speed   != null && (row.speed < L.speedMin || row.speed > L.speedMax)) ||
+  (row.density != null && (row.density < L.densityMin || row.density > L.densityMax)) ||
+  (row.bt      != null && Math.abs(row.bt) > L.btAbsMax) ||
+  (row.bz      != null && Math.abs(row.bz) > L.bzAbsMax);
 
 async function updateForecast(location = DEFAULT_LOCATION) {
   const history = await fetchSolarWindHistory();
@@ -24,3 +34,4 @@ async function updateForecast(location = DEFAULT_LOCATION) {
     geomagnetic_score: geomagneticScore,
     sightability_probability: sightability,
     updated_at: new Date().toISOString()
+  }

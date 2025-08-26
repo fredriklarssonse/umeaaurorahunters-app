@@ -10,7 +10,15 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
-		"push": "git add . && git commit -m \"auto: update\" && git push origin main"
+		"push": "git add . && git commit -m \"auto: update\" && git push origin main",
+		"refresh:umea": "node -r dotenv/config scripts/refresh-current.js umea",
+		"outlook:umea": "node -r dotenv/config scripts/refresh-outlook.js umea",
+		"update:forecast": "node scripts/refresh-current.js",
+		"cache:clear": "node -e \"require('fs').rmSync(process.env.WEATHER_CACHE_DIR||'cache',{recursive:true,force:true}); console.log('Cache cleared')\"",
+		"spots:umea": "node -r dotenv/config scripts/suggest-spots.js umea",
+		"spots:ostersund": "node -r dotenv/config scripts/suggest-spots.js ostersund",
+		"spots:community:umea": "node -r dotenv/config scripts/spots-community.js umea",
+    	"spots:community:geo": "node -r dotenv/config scripts/spots-community.js 63.83 20.27"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -30,6 +38,7 @@
 	"dependencies": {
 		"@supabase/supabase-js": "^2.56.0",
 		"dotenv": "^17.2.1",
+		"geotiff": "^2.1.4-beta.0",
 		"node-fetch": "^3.3.2",
 		"suncalc": "^1.9.0"
 	}
