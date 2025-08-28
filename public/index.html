@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Umeå Aurora Hunters</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-3xl mx-auto px-4 py-6">
+    <header class="mb-4">
+      <h1 class="text-2xl font-bold">Umeå Aurora Hunters</h1>
+      <p class="text-sm text-slate-600">Nuvarande chans & timvis prognos</p>
+    </header>
+
+    <!-- Controls -->
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4 mb-4">
+      <div class="flex-1">
+        <label class="block text-sm font-medium">Plats (namn eller "lat,lon")</label>
+        <input id="place-input" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300" placeholder="umea eller 63.83,20.26" />
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-search" class="px-3 py-2 rounded-lg bg-slate-900 text-white">Sök</button>
+        <button id="btn-geo" class="px-3 py-2 rounded-lg border border-slate-300">Använd min position</button>
+      </div>
+    </div>
+
+    <!-- Current card -->
+    <section id="current" class="mb-4 hidden">
+      <div class="rounded-2xl bg-white shadow p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold">Nu — <span id="loc-name">—</span></h2>
+            <p class="text-xs text-slate-600" id="coords">—</p>
+            <p class="text-xs text-slate-500 mt-1">Uträknat för: <span id="calc-time">—</span></p>
+          </div>
+          <div id="stale-badge" class="text-xs px-2 py-1 rounded bg-slate-100"></div>
+        </div>
+
+        <div id="day-hint" class="mt-3 hidden rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2">
+          Det är dag/skymning just nu — sikten dämpas. Kolla fliken <b>Ikväll</b> för bästa tider.
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          <div class="p-3 rounded-lg bg-slate-50">
+            <div class="text-xs text-slate-500">Norrskensstyrka (lokal)</div>
+            <div class="text-xl font-bold" id="geom-local">—</div>
+          </div>
+          <div class="p-3 rounded-lg bg-slate-50">
+            <div class="text-xs text-slate-500">Sikt (synbarhet)</div>
+            <div class="text-xl font-bold" id="sight">—</div>
+          </div>
+          <div class="p-3 rounded-lg bg-slate-50">
+            <div class="text-xs text-slate-500">Kp-proxy</div>
+            <div class="text-xl font-bold" id="kp">—</div>
+          </div>
+          <div class="p-3 rounded-lg bg-slate-50">
+            <div class="text-xs text-slate-500">Ljusförorening</div>
+            <div class="text-xl font-bold" id="light">—</div>
+          </div>
+        </div>
+
+        <!-- Inputs peek -->
+        <div id="inputs-peek" class="mt-3 text-xs text-slate-600">
+          Sol <span id="peek-sun">—</span> · Måne <span id="peek-moon">—</span> · Moln <span id="peek-clouds">—</span>
+        </div>
+
+        <!-- Why now -->
+        <div id="why" class="mt-3 hidden">
+          <div class="text-xs font-medium text-slate-700 mb-1">Varför just nu?</div>
+          <ul id="why-list" class="text-sm text-slate-600 list-disc ml-5 space-y-1"></ul>
+        </div>
+
+        <!-- Tonight hints -->
+        <div id="tonight-hints" class="mt-3 hidden">
+          <div class="text-xs font-medium text-slate-700 mb-1">Ikväll</div>
+          <div class="text-sm text-slate-700">
+            <span id="next-dark">Nästa mörker: —</span>
+            <span class="mx-2 text-slate-400">•</span>
+            <span id="best-hour">Bästa timme: —</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hourly tabs -->
+    <div class="flex gap-2 mb-2">
+      <button id="tab-tonight" class="px-3 py-2 rounded-lg bg-slate-900 text-white">Ikväll</button>
+      <button id="tab-tomorrow" class="px-3 py-2 rounded-lg border border-slate-300">Imorgon</button>
+    </div>
+
+    <!-- Hourly list -->
+    <section id="hourly" class="rounded-2xl bg-white shadow divide-y">
+      <div id="hourly-empty" class="p-4 text-sm text-slate-500">Laddar…</div>
+    </section>
+
+    <!-- Nearby popular -->
+    <section class="mt-6">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Populära platser nära dig</h3>
+        <button id="btn-refresh-nearby" class="text-sm px-3 py-1 rounded-lg border border-slate-300">Uppdatera</button>
+      </div>
+      <div id="nearby" class="grid sm:grid-cols-2 gap-2"></div>
+    </section>
+  </div>
+
+<script type="module">
+const $ = (sel) => document.querySelector(sel);
+const api = (p) => fetch(p).then(r => r.json());
+const fmt1 = (x, d=1) => (x==null ? '—' : Number(x).toFixed(d));
+const tzTime = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+const tzDateTime = new Intl.DateTimeFormat(undefined, { weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+
+let state = { loc: null, day: 'tonight', tonightHours: [] };
+
+function humanizeLight(cat, bortle) {
+  const m = { urban_core:'Stadskärna', suburban:'Tätort', rural:'Landsbygd', dark_rural:'Mörk landsbygd' };
+  const label = m[cat] || (cat ? cat : '—');
+  return bortle ? `${label} (B${bortle})` : label;
+}
+
+function updateWhy(detail) {
+  const box = $('#why');
+  const list = $('#why-list');
+  if (!detail || !Array.isArray(detail.breakdown) || !detail.breakdown.length) {
+    box.classList.add('hidden');
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = '';
+  detail.breakdown.slice(0,3).forEach(b => {
+    const li = document.createElement('li');
+    li.textContent = b.label || `${fmt1(b.contribution,1)} poäng`;
+    list.appendChild(li);
+  });
+  box.classList.remove('hidden');
+}
+
+function computeTonightHints(hours) {
+  let nextDark = null;
+  let best = null;
+  for (const h of hours) {
+    if (h.sun_alt_deg != null && h.sun_alt_deg <= -8 && !nextDark) nextDark = new Date(h.hour_start);
+    if (!best || (h.sightability_expected ?? -1) > (best.sightability_expected ?? -1)) best = h;
+  }
+  const nextDarkEl = $('#next-dark');
+  const bestHourEl = $('#best-hour');
+  if (nextDark) nextDarkEl.textContent = `Nästa mörker: ${tzTime.format(nextDark)}`;
+  else nextDarkEl.textContent = 'Nästa mörker: —';
+  if (best) {
+    const t = new Date(best.hour_start);
+    bestHourEl.textContent = `Bästa timme: ${tzTime.format(t)} (Sikt ${fmt1(best.sightability_expected,1)}/10, Moln ${fmt1(best.clouds_pct,0)}%)`;
+  } else {
+    bestHourEl.textContent = 'Bästa timme: —';
+  }
+  $('#tonight-hints').classList.remove('hidden');
+}
+
+async function loadCurrent(params) {
+  let q = params.lat && params.lon
+    ? `/api/forecast/current?lat=${params.lat}&lon=${params.lon}`
+    : `/api/forecast/current?location=${encodeURIComponent(params.location || 'umea')}`;
+
+  // be servern uppdatera innan svar
+  q += (q.includes('?') ? '&' : '?') + 'fresh=1';
+
+  const data = await api(q);
+
+  state.loc = data.location;
+
+  $('#current').classList.remove('hidden');
+  $('#loc-name').textContent = data.location?.name || '—';
+  $('#coords').textContent = data.location ? `${Number(data.location.lat).toFixed(5)}, ${Number(data.location.lon).toFixed(5)}` : '—';
+
+  const cur = data.current || {};
+  const now = data.geomNow || {};
+
+  $('#geom-local').textContent = fmt1(cur.geomagnetic_score, 2) + ' / 10';
+  $('#sight').textContent = fmt1(cur.sightability_probability, 1) + ' / 10';
+  $('#kp').textContent = fmt1(now.kp_proxy, 2);
+  $('#light').textContent = humanizeLight(cur.light_category, cur.light_bortle);
+
+  const stale = cur.stale_status || now.stale_status;
+  const staleH = cur.stale_hours ?? now.stale_hours;
+  const badge = $('#stale-badge');
+  if (stale) {
+    badge.textContent = `${fmt1(staleH,2)}h · ${stale}`;
+    badge.className = 'text-xs px-2 py-1 rounded ' + (
+      stale === 'fresh' ? 'bg-emerald-100 text-emerald-800' :
+      stale === 'slightly-stale' ? 'bg-amber-100 text-amber-800' :
+      'bg-rose-100 text-rose-800'
+    );
+  } else {
+    badge.textContent = '';
+    badge.className = 'text-xs px-2 py-1 rounded bg-slate-100';
+  }
+
+  // Visa timestamp + input-peek
+  const tt = cur?.time_tag ? new Date(cur.time_tag) : new Date();
+  $('#calc-time').textContent = tzDateTime.format(tt);
+
+  const inputs = cur?.sightability_detail?.inputs || {};
+  const peekSun = inputs.sunAltitude != null ? `${fmt1(inputs.sunAltitude,1)}°` : '—';
+  const peekMoon = (inputs.moonIllumination != null || inputs.moonAltitude != null)
+    ? `${fmt1((inputs.moonIllumination ?? 0)*100,0)}% @ ${fmt1(inputs.moonAltitude,1)}°`
+    : '—';
+  const peekClouds = inputs.cloudsPct != null ? `${fmt1(inputs.cloudsPct,0)}%` : '—';
+  $('#peek-sun').textContent = peekSun;
+  $('#peek-moon').textContent = peekMoon;
+  $('#peek-clouds').textContent = peekClouds;
+
+  // Hint om dag/skymning
+  const sunAlt = inputs.sunAltitude;
+  const dayHint = $('#day-hint');
+  if (sunAlt != null && sunAlt > -8) dayHint.classList.remove('hidden');
+  else dayHint.classList.add('hidden');
+
+  // Förklaringar
+  updateWhy(cur.sightability_detail);
+}
+
+async function loadHourly(day, params) {
+  state.day = day;
+  $('#hourly-empty').textContent = 'Laddar…';
+
+  const q = params.lat && params.lon
+    ? `/api/forecast/hourly?day=${day}&lat=${params.lat}&lon=${params.lon}`
+    : `/api/forecast/hourly?day=${day}&location=${encodeURIComponent(params.location || params.name || 'umea')}`;
+  const data = await api(q);
+
+  const list = data.hours || [];
+  if (day === 'tonight') {
+    state.tonightHours = list;
+    if (list.length) computeTonightHints(list);
+  }
+
+  const box = $('#hourly');
+  box.innerHTML = '';
+  if (!list.length) {
+    const d = document.createElement('div');
+    d.className = 'p-4 text-sm text-slate-500';
+    d.textContent = 'Inga timrader ännu.';
+    box.appendChild(d);
+    return;
+  }
+
+  for (const h of list) {
+    const t = new Date(h.hour_start);
+    const row = document.createElement('div');
+    row.className = 'p-3 flex items-center justify-between';
+
+    const left = document.createElement('div');
+    left.innerHTML = `
+      <div class="font-medium">${tzTime.format(t)}</div>
+      <div class="text-xs text-slate-500">
+        Sol ${fmt1(h.sun_alt_deg,0)}° · Måne ${fmt1(h.moon_illum_pct,0)}% @ ${fmt1(h.moon_alt_deg,0)}°
+      </div>`;
+
+    const right = document.createElement('div');
+    right.className = 'text-right text-sm';
+    right.innerHTML = `
+      <div>Sikt ${fmt1(h.sightability_expected,1)}/10 · Moln ${fmt1(h.clouds_pct,0)}%</div>
+      <div class="text-xs text-slate-500">Styrka ${fmt1(h.geomagnetic_expected,1)}/10 · Kp ${fmt1(h.kp_proxy,1)}</div>`;
+
+    row.appendChild(left);
+    row.appendChild(right);
+    box.appendChild(row);
+  }
+}
+
+async function loadNearby(lat, lon) {
+  const data = await api(`/api/locations/nearby?lat=${lat}&lon=${lon}&radiusKm=60`);
+  const box = $('#nearby');
+  box.innerHTML = '';
+  for (const r of data.locations || []) {
+    const el = document.createElement('button');
+    el.className = 'text-left p-3 rounded-lg bg-white shadow hover:shadow-md';
+    el.innerHTML = `
+      <div class="font-medium">${r.name}</div>
+      <div class="text-xs text-slate-500">${r.distance_km.toFixed(1)} km · events_30d=${r.events_30d}</div>`;
+    el.onclick = async () => {
+      $('#place-input').value = r.name;
+      await doSearch();
+    };
+    box.appendChild(el);
+  }
+}
+
+async function doSearch() {
+  const val = $('#place-input').value.trim();
+  if (!val) return;
+
+  const latlon = val.match(/^\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*$/);
+  if (latlon) {
+    const lat = +latlon[1], lon = +latlon[3];
+    await loadCurrent({ lat, lon });
+    await loadHourly(state.day, { lat, lon });
+    await loadNearby(lat, lon);
+  } else {
+    await loadCurrent({ location: val });
+    await loadHourly(state.day, { location: val });
+    if (state.loc?.lat && state.loc?.lon) await loadNearby(state.loc.lat, state.loc.lon);
+  }
+}
+
+$('#btn-search').onclick = doSearch;
+
+$('#btn-geo').onclick = () => {
+  if (!navigator.geolocation) return alert('Geolokalisering saknas i din webbläsare.');
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    $('#place-input').value = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+    await loadCurrent({ lat, lon });
+    await loadHourly(state.day, { lat, lon });
+    await loadNearby(lat, lon);
+  }, (err) => {
+    alert('Kunde inte hämta position: ' + err.message);
+  }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+};
+
+$('#tab-tonight').onclick = async () => {
+  $('#tab-tonight').className = 'px-3 py-2 rounded-lg bg-slate-900 text-white';
+  $('#tab-tomorrow').className = 'px-3 py-2 rounded-lg border border-slate-300';
+  if (state.loc) await loadHourly('tonight', state.loc);
+};
+$('#tab-tomorrow').onclick = async () => {
+  $('#tab-tomorrow').className = 'px-3 py-2 rounded-lg bg-slate-900 text-white';
+  $('#tab-tonight').className = 'px-3 py-2 rounded-lg border border-slate-300';
+  if (state.loc) await loadHourly('tomorrow', state.loc);
+};
+$('#btn-refresh-nearby').onclick = async () => {
+  if (state.loc?.lat && state.loc?.lon) loadNearby(state.loc.lat, state.loc.lon);
+};
+
+// Init: försök geolocation, annars Umeå
+(async function init() {
+  try {
+    await new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('no geo'));
+      navigator.geolocation.getCurrentPosition(
+        pos => { state.initGeo = pos; resolve(); },
+        () => reject(new Error('denied')),
+        { enableHighAccuracy: true, timeout: 4000, maximumAge: 120000 }
+      );
+    });
+  } catch {}
+  const lat = state.initGeo?.coords?.latitude;
+  const lon = state.initGeo?.coords?.longitude;
+  if (lat && lon) {
+    $('#place-input').value = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+    await loadCurrent({ lat, lon });
+    await loadHourly('tonight', { lat, lon });
+    await loadNearby(lat, lon);
+  } else {
+    $('#place-input').value = 'umea';
+    await loadCurrent({ location: 'umea' });
+    await loadHourly('tonight', { location: 'umea' });
+    if (state.loc?.lat && state.loc?.lon) await loadNearby(state.loc.lat, state.loc.lon);
+  }
+})();
+</script>
+</body>
+</html>

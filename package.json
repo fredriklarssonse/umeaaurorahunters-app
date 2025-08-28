@@ -13,12 +13,26 @@
 		"push": "git add . && git commit -m \"auto: update\" && git push origin main",
 		"refresh:umea": "node -r dotenv/config scripts/refresh-current.js umea",
 		"outlook:umea": "node -r dotenv/config scripts/refresh-outlook.js umea",
+		"outlook:ostersund": "node -r dotenv/config scripts/refresh-outlook.js ostersund",
+		"outlook:umea:tomorrow": "node -r dotenv/config scripts/refresh-outlook.js umea --day=tomorrow",
 		"update:forecast": "node scripts/refresh-current.js",
 		"cache:clear": "node -e \"require('fs').rmSync(process.env.WEATHER_CACHE_DIR||'cache',{recursive:true,force:true}); console.log('Cache cleared')\"",
 		"spots:umea": "node -r dotenv/config scripts/suggest-spots.js umea",
 		"spots:ostersund": "node -r dotenv/config scripts/suggest-spots.js ostersund",
 		"spots:community:umea": "node -r dotenv/config scripts/spots-community.js umea",
-    	"spots:community:geo": "node -r dotenv/config scripts/spots-community.js 63.83 20.27"
+		"spots:community:geo": "node -r dotenv/config scripts/spots-community.js 63.83 20.27",
+		"outlook:hourly:umea": "node -r dotenv/config scripts/refresh-outlook-hourly.js umea",
+		"outlook:hourly:tomorrow": "node -r dotenv/config scripts/refresh-outlook-hourly.js umea tomorrow",
+		"outlook:hourly:date": "node -r dotenv/config scripts/refresh-outlook-hourly.js umea 2025-09-01",
+		"outlook:hourly:geo": "node -r dotenv/config scripts/refresh-outlook-hourly.js 63.83 20.27 1",
+		"geom:update": "npm run hpo:update && npm run kp:update",
+		"nightly:umea": "npm run geom:update && npm run refresh:umea && npm run outlook:hourly:umea",
+		"hpo:update": "node -r dotenv/config -e \"import('./src/lib/db/update-hpo-forecast.js').then(m=>m.updateHpoForecastHourly())\"",
+		"kp:update": "node -r dotenv/config -e \"import('./src/lib/db/update-kp-forecast.js').then(m=>m.updateKpForecastHourly())\"",
+		"debug:hpo": "node -r dotenv/config scripts/debug-hpo-fetch.js",
+		"debug:kp": "node -r dotenv/config scripts/debug-kp-fetch.js",
+		"print:geom": "node -r dotenv/config scripts/print-geomagnetic.js",
+		"api": "node -r dotenv/config server/index.js"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -37,7 +51,9 @@
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.56.0",
+		"cors": "^2.8.5",
 		"dotenv": "^17.2.1",
+		"express": "^5.1.0",
 		"geotiff": "^2.1.4-beta.0",
 		"node-fetch": "^3.3.2",
 		"suncalc": "^1.9.0"

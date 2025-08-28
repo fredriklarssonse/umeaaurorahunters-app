@@ -1,103 +1,68 @@
 // src/lib/lightpollution/get-lightpollution.js
 import { CONFIG } from '../../config/app-config.js';
-import { classifyLightByCityZone } from '../light/urban-indicator.js';
-import fs from 'fs/promises';
-import { fromArrayBuffer, fromUrl } from 'geotiff';
 
-const provider = CONFIG.lightPollution.provider;
-const wantViirs = provider === 'viirs_geotiff' || (provider === 'auto' && CONFIG.lightPollution.viirs.tiffPath);
-if (wantViirs) { /* försök VIIRS; annars fall back */ }
+const R_EARTH = 6371;
+const toRad = (d) => (d * Math.PI / 180);
 
-let _viirs = null; // { image,bbox,width,height } | false
-
-async function openViirs() {
-  if (_viirs !== null) return _viirs;
-  const tiffPath = CONFIG.lightPollution.viirs.tiffPath;
-  if (!tiffPath) return (_viirs = false);
-
-  try {
-    // Stöd både lokalt filsystem och http(s)
-    const isHttp = /^https?:\/\//i.test(tiffPath);
-    const tiff = isHttp
-      ? await fromUrl(tiffPath)                         // COG via HTTP
-      : await (async () => {                            // Lokal fil
-          const buf = await fs.readFile(tiffPath);
-          return fromArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
-        })();
-
-    const image = await tiff.getImage();
-    const bbox = image.getBoundingBox(); // [minLon, minLat, maxLon, maxLat] (för EPSG:4326)
-    const width = image.getWidth();
-    const height = image.getHeight();
-    return (_viirs = { image, bbox, width, height });
-  } catch (e) {
-    console.warn('[VIIRS] Open failed:', e.message);
-    return (_viirs = false);
-  }
-}
-
-// Sampla närmaste pixel
-async function sampleViirsNearest(viirs, lat, lon) {
-  const { image, bbox, width, height } = viirs;
-  const [minLon, minLat, maxLon, maxLat] = bbox;
-  if (lon < minLon || lon > maxLon || lat < minLat || lat > maxLat) return null;
-
-  const x = Math.round(((lon - minLon) / (maxLon - minLon)) * (width - 1));
-  const y = Math.round(((maxLat - lat) / (maxLat - minLat)) * (height - 1));
-
-  const r = await image.readRasters({ window: [x, y, x + 1, y + 1] });
-  // readRasters kan returnera antingen en array av band eller en typad array.
-  let v = null;
-  if (Array.isArray(r)) {
-    const band0 = r[0];
-    v = (Array.isArray(band0) || band0?.length !== undefined) ? band0[0] : null;
-  } else if (r?.length !== undefined) {
-    v = r[0];
-  }
-  return Number.isFinite(v) ? Number(v) : null;
-}
-
-function categorizeRadiance(rad) {
-  const B = CONFIG.lightPollution.radianceBands;
-  const cats = CONFIG.lightPollution.radianceToCategory;
-  const bort = CONFIG.lightPollution.radianceToBortle;
-  if (rad == null) return { category: 'unknown', bortle: null };
-  let idx = 0;
-  while (idx < B.length && rad >= B[idx]) idx++;
-  return { category: cats[idx] || cats[cats.length - 1], bortle: bort[idx] || bort[bort.length - 1] };
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const la1 = toRad(lat1), la2 = toRad(lat2);
+  const a = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+  return 2 * R_EARTH * Math.asin(Math.sqrt(a));
 }
 
 /**
- * getLightPollution(lat, lon, locKeyForZones?) -> { source, category, bortle, radiance, scoreLight, detail }
+ * Zones-provider:
+ * - Väljer närmaste stadskärna från CONFIG.lightZones
+ * - Klassar kategori efter avstånd: urban_core / suburban / rural
+ * - Mappning till ungefärlig Bortle: 8 / 6 / 3 (enkelt men praktiskt)
  */
-export async function getLightPollution(lat, lon, locKeyForZones = null) {
-  if (CONFIG.lightPollution.provider === 'viirs_geotiff') {
-    const viirs = await openViirs();
-    if (viirs) {
-      const radiance = await sampleViirsNearest(viirs, lat, lon);
-      const { category, bortle } = categorizeRadiance(radiance);
-      const scoreLight = CONFIG.lightPollution.categoryLightScore[category] ?? 0.5;
-      return {
-        source: 'viirs_geotiff',
-        category, bortle, radiance,
-        scoreLight,
-        detail: { note: 'VIIRS Annual VNL (GeoTIFF)', bands: 'radiance' }
-      };
-    }
-    // fall-through till zoner om öppning/sampling misslyckas
+export async function getLightPollution({ lat, lon }) {
+  const provider = CONFIG?.lightPollution?.provider || process.env.LIGHT_PROVIDER || 'zones';
+
+  // Just nu stöder vi “zones” stabilt. Andra providers (viirs_geotiff) kan läggas till senare.
+  if (provider !== 'zones') {
+    // fallback till zones om vi inte har annan provider aktiv
+    // (Vill du hellre returnera null här, byt till: return null;)
   }
 
-  // Fallback: zoner (urban/suburban/rural) via stadskärne-avstånd (MVP)
-  const key = locKeyForZones || CONFIG.lightPollution.zonesFallbackKey;
-  const z = classifyLightByCityZone(key, lat, lon);
-  const map = { urban: ['urban_core', 8], suburban: ['suburban', 6], rural: ['rural', 3], unknown: ['suburban', 6] };
-  const [category, bortle] = map[z.class] || ['suburban', 6];
-  const scoreLight = CONFIG.lightPollution.categoryLightScore[category] ?? z.scoreLight ?? 0.6;
+  const zones = CONFIG?.lightZones;
+  if (!zones) return null;
+
+  // Hitta närmaste definierade stad
+  let bestKey = null, best = null, bestDist = Infinity;
+  for (const [key, z] of Object.entries(zones)) {
+    const d = haversineKm(lat, lon, z.center.lat, z.center.lon);
+    if (d < bestDist) { bestDist = d; bestKey = key; best = z; }
+  }
+  if (!best) return null;
+
+  // Trösklar (km) från config eller standard
+  const urbanKm    = Number(best.urban_km ?? 2);
+  const suburbanKm = Number(best.suburban_km ?? 5);
+
+  let category = 'rural';
+  let bortle   = 3;
+  if (bestDist <= urbanKm) {
+    category = 'urban_core';
+    bortle = 8;
+  } else if (bestDist <= suburbanKm) {
+    category = 'suburban';
+    bortle = 6;
+  }
 
   return {
     source: 'zones',
-    category, bortle, radiance: null,
-    scoreLight,
-    detail: { distanceKm: z.distanceKm, cityName: z.cityName }
+    category,
+    bortle,
+    radiance: null, // kan fyllas när vi kopplar VIIRS
+    detail: {
+      cityKey: bestKey,
+      ...best,
+      distance_km: Math.round(bestDist * 10) / 10
+    }
   };
 }
+
+export default { getLightPollution };

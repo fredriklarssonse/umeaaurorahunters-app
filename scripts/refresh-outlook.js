@@ -1,32 +1,42 @@
-import { updateForecast } from '../src/lib/db/update-forecast.js';
-import { updateEveningForecast } from '../src/lib/db/update-evening-forecast.js';
+// scripts/refresh-outlook.js
+// Exempel:
+//   node -r dotenv/config scripts/refresh-outlook.js umea
+//   node -r dotenv/config scripts/refresh-outlook.js "63.83,20.26" --day=tomorrow
+import { updateHourlyForecast } from '../src/lib/db/update-hourly-forecast.js';
+import { resolveLocationArg, recordLocationUsage, getPopularNearby } from '../src/lib/locations.js';
 
-function parseLocArg(args) {
-  if (!args.length) return 'umea';
-  const a0 = args[0];
-  if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(a0)) {
-    const [lat, lon] = a0.split(',').map(Number);
-    return { lat, lon, name: 'Custom' };
-  }
-  if (args.length >= 2 && !isNaN(parseFloat(a0)) && !isNaN(parseFloat(args[1]))) {
-    return { lat: parseFloat(a0), lon: parseFloat(args[1]), name: 'Custom' };
-  }
-  return a0;
+
+const TZ = 'Europe/Stockholm';
+
+function parseDay(argv) {
+  const arg = argv.find(a => a === 'tomorrow' || a === 'tonight') ||
+              (argv.find(a => a.startsWith('--day=')) || '').split('=')[1];
+  return arg === 'tomorrow' ? 'tomorrow' : 'tonight';
+}
+function fmtIso(iso) {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, hour: '2-digit', minute: '2-digit', weekday: 'short', day: '2-digit', month: 'short' }).format(new Date(iso));
 }
 
-const locInput = parseLocArg(process.argv.slice(2));
-const fmtTime = (iso) => new Intl.DateTimeFormat('sv-SE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Stockholm' }).format(new Date(iso));
+const argv = process.argv.slice(2);
+const locArg = argv[0] || process.env.DEFAULT_LOCATION || 'umea';
+const day = parseDay(argv);
 
-(async () => {
-  const cur = await updateForecast(locInput);
-  const out = await updateEveningForecast(locInput, []); // geo räknas ändå
+const loc = await resolveLocationArg(locArg); // {id,name,lat,lon}
+const res = await updateHourlyForecast(loc.name, loc.lat, loc.lon, { day });
 
-  console.log(`\nKvällens prognos för ${cur.location.name} (${cur.forecast.location}):`);
-  for (const r of out.rows) {
-    const label = r.window_label === 'early' ? 'Tidiga kvällen' : 'Sena kvällen';
-    console.log(`  ${label} (${fmtTime(r.window_start)}–${fmtTime(r.window_end)}):`);
-    console.log(`    Geomagnetik (lokal/persistens): ${r.geomagnetic_expected?.toFixed?.(1) ?? r.geomagnetic_expected}/10  | Kp (proxy): ${r.kp_expected}`);
-    console.log(`    Sightability: ${r.sightability_expected?.toFixed?.(1) ?? r.sightability_expected}/10`);
+await recordLocationUsage(loc.id, 'forecast');
+
+console.log(`Timvis prognos uppdaterad för ${loc.name} (${loc.lat.toFixed(5)},${loc.lon.toFixed(5)}) — ${day}`);
+if (res.hours?.length) {
+  console.log(`Fönster: ${fmtIso(res.hours[0])} – ${fmtIso(res.hours[res.hours.length-1])}  (${res.hours.length} tim.)`);
+}
+console.log(`Saved ${res.rowsSaved} rows to aurora_forecast_outlook_hourly`);
+
+// (Bonus) visa 5 populära spots nära platsen
+const nearby = await getPopularNearby(loc.lat, loc.lon, { radiusKm: 60, limit: 5 });
+if (nearby.length) {
+  console.log('\nPopulära spots nära dig (≤60 km):');
+  for (const r of nearby) {
+    console.log(`  - ${r.name}  (${r.distance_km.toFixed(1)} km)  · events_30d=${r.events_30d}`);
   }
-  console.log();
-})().catch(err => { console.error(err); process.exitCode = 1; });
+}
