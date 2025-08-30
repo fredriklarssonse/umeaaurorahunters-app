@@ -32,7 +32,11 @@
 		"debug:hpo": "node -r dotenv/config scripts/debug-hpo-fetch.js",
 		"debug:kp": "node -r dotenv/config scripts/debug-kp-fetch.js",
 		"print:geom": "node -r dotenv/config scripts/print-geomagnetic.js",
-		"api": "node -r dotenv/config server/index.js"
+		"api": "node -r dotenv/config server/index.js",
+		"repo:dry": "node repo-migrations/0001_reorg.js",
+		"repo:migrate": "node repo-migrations/0001_reorg.js --apply",
+		"tonight:all": "node -r dotenv/config scripts/update-tonight-all.js --all",
+  		"tonight:umea": "node -r dotenv/config scripts/update-tonight-all.js --name \"Umeå\" --lat 63.8258 --lon 20.263"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",

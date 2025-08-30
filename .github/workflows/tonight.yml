@@ -1,0 +1,32 @@
+name: Update tonight data
+
+on:
+  schedule:
+    # Tiderna är i UTC.
+    # Sommartid (CEST, UTC+2): 17:30 lokal = 15:30 UTC, 20:30 lokal = 18:30 UTC
+    - cron: "30 15 * * *"   # 17:30 Europe/Stockholm under sommartid
+    - cron: "30 18 * * *"   # 20:30 Europe/Stockholm under sommartid
+  workflow_dispatch: {}      # låter dig köra manuellt från GitHub UI
+
+jobs:
+  run-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run all tonight updates
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          HPO_HP60_JSON: ${{ secrets.HPO_HP60_JSON }}
+          HPO_HP30_JSON: ${{ secrets.HPO_HP30_JSON }}
+          KP_HOURLY_JSON: ${{ secrets.KP_HOURLY_JSON }}
+        run: node -r dotenv/config scripts/update-tonight-all.js --all
