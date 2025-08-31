@@ -1,9 +1,12 @@
 // server/index.js
 import express from 'express';
 import cors from 'cors';
+import hourlyRouter from './routes-hourly.js';
+
 
 // Start Express
 const app = express();
+app.use(hourlyRouter);
 app.use(cors());
 app.use(express.json());
 

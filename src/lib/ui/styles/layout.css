@@ -1,0 +1,21 @@
+/* Sidlager/layout */
+.ui-wrap { max-width: var(--maxw); margin: 24px auto; padding: 0 16px; }
+.ui-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.ui-h1 { font-size: var(--title-lg); margin:0 0 4px 0; }
+.ui-meta { font-size:12px; opacity:.7; }
+
+.ui-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.ui-facts { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 16px; }
+
+.ui-error {
+  background: var(--err-fg);
+  color:#fff;
+  padding:10px; border-radius:8px; margin-bottom:8px;
+}
+.ui-small { font-size:12px; white-space:pre-wrap; opacity:.8 }

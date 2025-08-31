@@ -1,0 +1,95 @@
+{
+  "ui": {
+    "now": "Nu",
+    "evening": "Ikväll",
+    "overview": "Översikt",
+    "whyNow": "Varför just nu?",
+    "potential": "Norrskensstyrka (potential)",
+    "sight": "Sikt (synbarhet)",
+    "kpProxy": "Kp-proxy",
+    "lightPollution": "Ljusförorening",
+    "sun": "Sol",
+    "moon": "Måne",
+    "clouds": "Moln",
+    "low": "Låga",
+    "mid": "Mellan",
+    "high": "Höga",
+    "total": "Totalt",
+    "bestHour": "Bästa timme",
+    "darkWindow": "Mörkerfönster",
+    "source": "Källa",
+    "stale": "{age}h · {status}",
+    "computedFor": "Uträknat för: {datetime}",
+    "location": "Plats",
+    "latlon": "{lat}, {lon}",
+    "updated": "Uppdaterad",
+    "nextDark": "Nästa mörker",
+    "trend": "Trend",
+    "trend_flat": "Oförändrad",
+    "trend_up": "Upp",
+    "trend_down": "Ner",
+    "refresh": "Uppdatera",
+    "allowLocation": "Tillåt plats",
+    "changeLocation": "Byt plats",
+    "date": "Datum",
+    "today": "Idag",
+    "tomorrow": "Imorgon",
+    "tonightSummary": "Fönster: {from} – {to}",
+    "hour": "Timme",
+    "value": "Värde",
+    "scoreOutOf10": "{score}/10",
+    "potentialSource": "Källa: {src}",
+    "breakdown": "Detaljer",
+    "noData": "Ingen data",
+    "loading": "Laddar …"
+  },
+  "status": {
+    "fresh": "färsk",
+    "slightly-stale": "något gammal",
+    "stale": "gammal",
+    "unknown": "okänd"
+  },
+  "windowSource": {
+    "suncalc": "SunCalc",
+    "fixed": "fast fönster"
+  },
+  "light": {
+    "urban_core": "Stadskärna (B8)",
+    "suburban": "Tätort (B6–7)",
+    "rural": "Landsbygd (B1–4)",
+    "unknown": "Okänd"
+  },
+  "potentialSource": {
+    "hpo": "HPO",
+    "kp": "Kp",
+    "blend": "Blandning"
+  },
+  "trend": {
+    "flat": "oförändrad",
+    "up": "upp",
+    "down": "ner"
+  },
+  "breakdown": {
+    "twilight": {
+      "day": "DAGSLJUS: Sol {sunAlt}° ⇒ mycket svårt (solfaktor={factor})",
+      "nautical": "SKYMNING: Sol {sunAlt}° ⇒ dämpning, starkt norrsken kan synas (solfaktor={factor})"
+    },
+    "clouds": "Moln: {cloudsPct}% → molnfaktor={factor}",
+    "moon": "Måne: {illumPct}% @ {alt}° → månfaktor={factor}",
+    "light": "Ljusförorening: {categoryLabel} → ljusfaktor={factor}"
+  },
+  "tooltips": {
+    "potential": "Vårt sammanvägda mått (0–10) för norrskenets styrka.",
+    "sight": "Synbarhet (0–10) efter sol, moln, måne och ljusförorening.",
+    "kpProxy": "Kp-proxy från våra källor (t.ex. HPO/Kp).",
+    "darkWindow": "Tidsfönster när det är tillräckligt mörkt för norrsken.",
+    "stale": "Hur färsk grunddatan är (mätt i timmar)."
+  },
+  "errors": {
+    "bad_latlon": "Ogiltig position.",
+    "current_failed": "Misslyckades att hämta aktuell data.",
+    "evening_failed": "Misslyckades att hämta kvällens data.",
+    "network": "Nätverksfel, försök igen.",
+    "no_clouds": "Molndata saknas för vald timme."
+  }
+}

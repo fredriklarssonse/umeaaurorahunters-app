@@ -1,126 +1,156 @@
 // server/routes-evening.js
 import { Router } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../src/lib/db/client.js';
+import { calculateSightabilityDetailed } from '../src/lib/astro/sightability.js';
+import { nightWindowForDate } from '../src/lib/astro/night-window.js'; // din befintliga helper
+import { CONFIG } from '../src/config/app-config.js';
 
 const router = Router();
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
-const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
-
-// Hjälpare: hämta platsnamn från lat/lon om sådana skickas in
-async function resolveLocationName({ location, lat, lon }) {
-  if (location) return location;
-  if (lat && lon) {
-    const { data, error } = await sb
-      .from('aurora_locations')
-      .select('name')
-      .eq('lat', Number(lat))
-      .eq('lon', Number(lon))
-      .limit(1)
-      .maybeSingle();
-    if (!error && data) return data.name;
-  }
-  // fallback
-  return 'Umeå';
+function isoFloorHour(d) {
+  const x = new Date(d);
+  x.setUTCMinutes(0, 0, 0);
+  return x.toISOString();
 }
+function toISO(d) { return new Date(d).toISOString(); }
 
-// Hjälpare: bygg tidsfönster ~”ikväll” (enkel, 18–26 lokal tid)
-function tonightWindowUTC(tz = 'Europe/Stockholm', dateStr) {
-  // dateStr = "YYYY-MM-DD" (lokalt); om saknas, använd idag.
-  const base = dateStr ? new Date(dateStr + 'T00:00:00Z') : new Date();
-  // Plocka lokala datumkomponenter i vald TZ
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
-  }).formatToParts(base);
-  const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
-  const y = Number(map.year), m = Number(map.month), d = Number(map.day);
-
-  // Skapa två tider i lokal tid 18:00 och 02:00 och konvertera till UTC via Date.parse på ISO med offset via intl-trick:
-  // Vi använder samma dag kl 18 och nästa dag kl 02, men för att få korrekt UTC
-  // bygger vi Date-objekt genom att formatera dem tillbaka till UTC via timeZone.
-  const toUTC = (yy, mm, dd, hh) => {
-    const dt = new Date(Date.UTC(yy, mm - 1, dd, hh, 0, 0));
-    // dt representerar  hh:00 i *UTC*. För att få "lokal hh:00 i tz" i UTC,
-    // kan vi räkna ut offset genom att formatera dt som om den var i tz och
-    // sedan justera skillnaden mellan dt (UTC) och samma väggtid i tz.
-    // Enklare: vi tar ett spann (nu-12..+18) för att slippa trixa – men vi vill ha ungefär kväll:
-    return dt;
-  };
-
-  // Pragmatisk lösning: använd nuvarande dygns 16..26 UTC som närmevärde (blir kväll i SE sommartid).
-  const fromUTC = new Date(Date.UTC(y, m - 1, d, 16, 0, 0)); // ~18:00 lokal sommartid
-  const toUTC_   = new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0)); // ~02:00 nästa lokal-dag
-
-  return { from: fromUTC.toISOString(), to: toUTC_.toISOString() };
-}
-
-router.get('/', async (req, res) => {
+/**
+ * GET /api/evening?lat=&lon=&date=YYYY-MM-DD
+ * Returnerar:
+ *  - timeline { from, to }
+ *  - potential: [{ hour, score10, source? }]
+ *  - sight:     [{ hour, score10, breakdown:[{code,params}], inputs }]
+ *  - clouds:    [{ hour, low, mid, high, total }]
+ *  - summary:   { best_hour, dark_window, trend }
+ *  - meta:      { lat, lon, requested_date, adjusted_to?, location?, windowSource }
+ */
+router.get('/api/evening', async (req, res) => {
   try {
-    const q = req.query || {};
-    const location = await resolveLocationName(q);
-    const hoursAhead = Number(q.hours || 10);
-    const dateStr = q.date || null; // "YYYY-MM-DD" lokal – om satt, använd kvällsfönster, annars "nu..+hoursAhead"
-
-    let fromISO, toISO;
-    if (dateStr) {
-      const win = tonightWindowUTC('Europe/Stockholm', dateStr);
-      fromISO = win.from;
-      toISO = win.to;
-    } else {
-      const now = new Date();
-      fromISO = now.toISOString();
-      toISO = new Date(now.getTime() + hoursAhead * 3600 * 1000).toISOString();
+    const lat = parseFloat(req.query.lat);
+    const lon = parseFloat(req.query.lon);
+    const dateQ = (req.query.date || '').toString(); // YYYY-MM-DD eller tomt
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({ error: 'bad_latlon' });
     }
 
-    // Hämta rader från aurora_hourly
-    const { data, error } = await sb
-      .from('aurora_hourly')
-      .select('hour_start, potential_score10, sight_score10, cloud_total_pct, sun_alt_deg, moon_alt_deg, moon_illum')
-      .eq('location_name', location)
+    // 1) Bestäm kvällsfönster (SunCalc eller fallback)
+    const { fromUTC, toUTC, source: winSource } = await nightWindowForDate({ lat, lon, dateStr: dateQ });
+    const from = new Date(fromUTC);
+    const to   = new Date(toUTC);
+    const fromISO = isoFloorHour(from);
+    const toISO   = isoFloorHour(to);
+
+    // 2) POTENTIAL (HPO/Kp) under kvällen – redan 0..10 i aurora_potential_hourly
+    const potRows = await supabase
+      .from('aurora_potential_hourly')
+      .select('hour_start, potential_score10, potential_source')
       .gte('hour_start', fromISO)
       .lte('hour_start', toISO)
       .order('hour_start', { ascending: true });
 
-    if (error) {
-      console.error('[evening] supabase error:', error);
-      return res.status(500).json({ error: 'db_error' });
+    let potential = [];
+    if (potRows.data && potRows.data.length) {
+      potential = potRows.data.map(r => ({
+        hour: toISO(r.hour_start),
+        score10: +Number(r.potential_score10 || 0).toFixed(6),
+        source: r.potential_source || null
+      }));
+    } else {
+      // fallback: läs senaste globala geomagnetik (för att inte bli tomt)
+      const g = await supabase
+        .from('aurora_geomagnetic_now')
+        .select('global_score')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const s = (g.data?.global_score ?? 0);
+      const hours = [];
+      for (let t = new Date(fromISO); t <= new Date(toISO); t.setUTCHours(t.getUTCHours() + 1)) {
+        hours.push(new Date(t));
+      }
+      potential = hours.map(h => ({ hour: h.toISOString(), score10: +s.toFixed(2), source: 'blend' }));
     }
 
-    const timeline = (data && data.length)
-      ? { from: data[0].hour_start, to: data[data.length - 1].hour_start }
-      : { from: fromISO, to: toISO };
+    // 3) MOLN (weather_hourly)
+    const wxRows = await supabase
+      .from('weather_hourly')
+      .select('hour_start, low_pct, mid_pct, high_pct, total_pct')
+      .eq('location_name', req.query.location || 'Umeå') // valfritt om du vill knyta till namn, annars kan vi mappa via lat/lon-id
+      .gte('hour_start', fromISO)
+      .lte('hour_start', toISO)
+      .order('hour_start', { ascending: true });
 
-    const potential = [];
-    const sight = [];
-    const clouds = [];
-
-    for (const r of (data || [])) {
-      potential.push({ hour: r.hour_start, score10: Number(r.potential_score10 ?? 0) });
-      sight.push({ hour: r.hour_start, score10: Number(r.sight_score10 ?? 0) });
-      clouds.push({
-        hour: r.hour_start,
-        total: r.cloud_total_pct == null ? null : Number(r.cloud_total_pct),
-        sun: r.sun_alt_deg == null ? null : Number(r.sun_alt_deg),
-        moonAlt: r.moon_alt_deg == null ? null : Number(r.moon_alt_deg),
-        moonIllum: r.moon_illum == null ? null : Number(r.moon_illum)
+    const cloudsByHour = new Map();
+    if (wxRows.data) {
+      wxRows.data.forEach(r => {
+        cloudsByHour.set(toISO(r.hour_start), {
+          low: r.low_pct ?? null,
+          mid: r.mid_pct ?? null,
+          high: r.high_pct ?? null,
+          total: r.total_pct ?? null
+        });
       });
     }
 
-    res.json({
-      timeline,
+    // 4) SIGHT per timme – bygg med kodade breakdown-poster
+    //    (lightCategory: hämta från din lightpollution/zones om du vill – här enkel default)
+    const lightCategory = 'urban_core'; // byt till real från ditt light-API om tillgängligt
+
+    const sight = potential.map(p => {
+      const c = cloudsByHour.get(p.hour);
+      const cloudsPct = (c && typeof c.total === 'number') ? c.total : null;
+      const det = calculateSightabilityDetailed({
+        lat, lon,
+        when: new Date(p.hour),
+        cloudsPct,
+        geomagneticScore: p.score10,     // potential i 0..10
+        lightCategory
+      });
+      return {
+        hour: p.hour,
+        score10: det.score,
+        breakdown: det.breakdown,        // <- { code, params }[]
+        inputs: det.inputs
+      };
+    });
+
+    // 5) timeline/summary
+    const best = sight.reduce((acc, s) => (s.score10 > acc.score ? { hour: s.hour, score: s.score10 } : acc), { hour: fromISO, score: 0 });
+    const summary = {
+      best_hour: { hour: best.hour, sight: +best.score.toFixed(2) },
+      dark_window: { from: from.toISOString(), to: to.toISOString(), source: winSource },
+      trend: 'flat'
+    };
+
+    // 6) clouds-array i svar (för UI)
+    const clouds = potential.map(p => {
+      const c = cloudsByHour.get(p.hour) || {};
+      return { hour: p.hour, low: c.low ?? null, mid: c.mid ?? null, high: c.high ?? null, total: c.total ?? null };
+    });
+
+    // 7) svar
+    res.set('Cache-Control', 'public, max-age=60'); // 1 min cache för kväll
+    return res.json({
+      timeline: { from: from.toISOString(), to: to.toISOString() },
       potential,
       sight,
       clouds,
+      events: [],
+      cameras: [],
+      sat: { frames: [] },
+      summary,
       meta: {
-        location,
-        mode: dateStr ? 'tonight' : 'next_hours',
-        hours: hoursAhead,
+        lat, lon,
+        requested_date: dateQ || null,
+        adjusted_to: null,
+        location: null, // lägg in din location-info om du har
+        windowSource: winSource
       }
     });
+
   } catch (err) {
-    console.error('[evening] fail:', err);
-    res.status(500).json({ error: 'evening_failed' });
+    console.error('[evening]', err);
+    return res.status(500).json({ error: 'evening_failed' });
   }
 });
 

@@ -1,11 +1,11 @@
 <script>
-	import favicon from '$lib/assets/favicon.svg';
+  import '$appcss'; // alias nedan
+  import { setContext } from 'svelte';
+  import { makeI18n } from '$lib/i18n/i18n.js';
+  export let data;
 
-	let { children } = $props();
+  const { t, fmt, dict, lang } = makeI18n(data.lang, data.dict);
+  setContext('i18n', { t, fmt, dict, lang });
 </script>
 
-<svelte:head>
-	<link rel="icon" href={favicon} />
-</svelte:head>
-
-{@render children?.()}
+<slot />

@@ -36,7 +36,9 @@
 		"repo:dry": "node repo-migrations/0001_reorg.js",
 		"repo:migrate": "node repo-migrations/0001_reorg.js --apply",
 		"tonight:all": "node -r dotenv/config scripts/update-tonight-all.js --all",
-  		"tonight:umea": "node -r dotenv/config scripts/update-tonight-all.js --name \"Umeå\" --lat 63.8258 --lon 20.263"
+  		"tonight:umea": "node -r dotenv/config scripts/update-tonight-all.js --name \"Umeå\" --lat 63.8258 --lon 20.263",
+		"repo:dry2":   "node repo-migrations/0002_modularize.js --dry",
+    	"repo:apply2": "node repo-migrations/0002_modularize.js --apply"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",

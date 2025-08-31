@@ -1,0 +1,25 @@
+/* Design tokens (lätt att tematisera) */
+:root {
+  --bg: #060913;
+  --surface: #0b1020;
+  --surface-2: #111827;
+  --border: #1f2937;
+
+  --text: #e5e7eb;
+  --text-muted: #cbd5e1;
+
+  --accent: #34d399;   /* grön */
+  --warn-bg: #fef3c7;  --warn-fg: #7c2d12;
+  --ok-bg: #d1fae5;    --ok-fg: #065f46;
+  --err-bg: #fee2e2;   --err-fg: #7f1d1d;
+
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  --maxw: 960px;
+
+  --badge-fs: 12px;
+  --title-sm: 12px;
+  --title-lg: 22px;
+  --value-lg: 24px;
+  --chip-fs: 12px;
+}

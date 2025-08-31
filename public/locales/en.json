@@ -1,0 +1,95 @@
+{
+  "ui": {
+    "now": "Now",
+    "evening": "Tonight",
+    "overview": "Overview",
+    "whyNow": "Why now?",
+    "potential": "Aurora strength (potential)",
+    "sight": "Sightability",
+    "kpProxy": "Kp proxy",
+    "lightPollution": "Light pollution",
+    "sun": "Sun",
+    "moon": "Moon",
+    "clouds": "Clouds",
+    "low": "Low",
+    "mid": "Mid",
+    "high": "High",
+    "total": "Total",
+    "bestHour": "Best hour",
+    "darkWindow": "Dark window",
+    "source": "Source",
+    "stale": "{age}h · {status}",
+    "computedFor": "Computed for: {datetime}",
+    "location": "Location",
+    "latlon": "{lat}, {lon}",
+    "updated": "Updated",
+    "nextDark": "Next darkness",
+    "trend": "Trend",
+    "trend_flat": "Flat",
+    "trend_up": "Rising",
+    "trend_down": "Falling",
+    "refresh": "Refresh",
+    "allowLocation": "Allow location",
+    "changeLocation": "Change location",
+    "date": "Date",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "tonightSummary": "Window: {from} – {to}",
+    "hour": "Hour",
+    "value": "Value",
+    "scoreOutOf10": "{score}/10",
+    "potentialSource": "Source: {src}",
+    "breakdown": "Details",
+    "noData": "No data",
+    "loading": "Loading…"
+  },
+  "status": {
+    "fresh": "fresh",
+    "slightly-stale": "slightly stale",
+    "stale": "stale",
+    "unknown": "unknown"
+  },
+  "windowSource": {
+    "suncalc": "SunCalc",
+    "fixed": "fixed window"
+  },
+  "light": {
+    "urban_core": "Urban core (B8)",
+    "suburban": "Suburban (B6–7)",
+    "rural": "Rural (B1–4)",
+    "unknown": "Unknown"
+  },
+  "potentialSource": {
+    "hpo": "HPO",
+    "kp": "Kp",
+    "blend": "Blend"
+  },
+  "trend": {
+    "flat": "flat",
+    "up": "up",
+    "down": "down"
+  },
+  "breakdown": {
+    "twilight": {
+      "day": "DAYLIGHT: Sun {sunAlt}° ⇒ very hard (sun factor={factor})",
+      "nautical": "TWILIGHT: Sun {sunAlt}° ⇒ dimming, strong aurora may be visible (sun factor={factor})"
+    },
+    "clouds": "Clouds: {cloudsPct}% → cloud factor={factor}",
+    "moon": "Moon: {illumPct}% @ {alt}° → moon factor={factor}",
+    "light": "Light pollution: {categoryLabel} → light factor={factor}"
+  },
+  "tooltips": {
+    "potential": "Our combined 0–10 measure for auroral strength.",
+    "sight": "0–10 visibility considering sun, clouds, moon and light pollution.",
+    "kpProxy": "Kp proxy from our sources (e.g., HPO/Kp).",
+    "darkWindow": "Time window when it’s dark enough to see aurora.",
+    "stale": "How fresh the underlying data is (in hours)."
+  },
+  "errors": {
+    "bad_latlon": "Invalid position.",
+    "current_failed": "Failed to load current data.",
+    "evening_failed": "Failed to load tonight data.",
+    "network": "Network error, please retry.",
+    "no_clouds": "Cloud data is missing for the selected hour."
+  }
+}
