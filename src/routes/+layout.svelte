@@ -1,11 +1,8 @@
-<script>
-  import '$appcss'; // alias nedan
-  import { setContext } from 'svelte';
-  import { makeI18n } from '$lib/i18n/i18n.js';
-  export let data;
-
-  const { t, fmt, dict, lang } = makeI18n(data.lang, data.dict);
-  setContext('i18n', { t, fmt, dict, lang });
+<!-- src/routes/+layout.svelte -->
+<script lang="ts">
+  // Tidigare stod det: import '$appcss'
+  // Byt till den riktiga filen vi redan har:
+  import '../app.css';
 </script>
 
 <slot />

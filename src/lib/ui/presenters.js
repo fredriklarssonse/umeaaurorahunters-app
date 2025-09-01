@@ -1,6 +1,5 @@
 // src/lib/ui/presenters.js
 
-// Badge-färg för stale-status
 export function staleBadge(status) {
   if (status === 'fresh') return 'ok';
   if (status === 'slightly-stale') return 'warn';
@@ -8,12 +7,10 @@ export function staleBadge(status) {
   return 'neutral';
 }
 
-// I18n-nyckel för ljuskategori (UI översätter nyckeln -> text)
 export function lightCategoryKey(cat) {
   return 'light.' + (cat || 'unknown');
 }
 
-// Plocka fram kortvärdena som visas i ScoreCard
 export function deriveNowNumbers(current, geomNow) {
   const potential10 =
     current?.geomagnetic_score ??
@@ -33,13 +30,11 @@ export function deriveNowNumbers(current, geomNow) {
   return { potential10, sight10, kpProxy };
 }
 
-// “Uträknat för …”
 export function computedForText(current, fmt, t) {
   if (!current?.time_tag) return '';
   return t('ui.computedFor', { datetime: fmt.dateTimeShort(current.time_tag) });
 }
 
-// Chip-texter (Sol/Måne/Moln)
 export function chipTextsFromInputs(inputs, t) {
   const sunTxt =
     inputs?.sunAltitude != null
@@ -59,7 +54,6 @@ export function chipTextsFromInputs(inputs, t) {
   return { sunTxt, moonTxt, cloudsTxt };
 }
 
-// Källa: HPO/Kp/blend (visas som hint under Potential)
 export function potentialSourceLabel(current, geomNow, t) {
   if (geomNow?.detail) {
     return t('ui.potentialSource', { src: t('potentialSource.blend') });

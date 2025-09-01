@@ -1,0 +1,19 @@
+{
+  "ui.tonight.title": "Ikväll",
+  "ui.location.label": "Plats",
+  "ui.coords.latlon": "Lat/Lon",
+  "ui.now.potential": "Potential",
+  "ui.now.visibility": "Sikt",
+
+  "forecast.potential.very_low": "Mycket låg potential",
+  "forecast.potential.low": "Låg potential",
+  "forecast.potential.moderate": "Måttlig potential",
+  "forecast.potential.high": "Hög potential",
+  "forecast.potential.extreme": "Extrem potential",
+
+  "forecast.visibility.very_poor": "Mycket dålig sikt",
+  "forecast.visibility.poor": "Dålig sikt",
+  "forecast.visibility.moderate": "Måttlig sikt",
+  "forecast.visibility.good": "Bra sikt",
+  "forecast.visibility.excellent": "Utmärkt sikt"
+}

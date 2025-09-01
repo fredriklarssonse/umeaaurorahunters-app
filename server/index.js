@@ -1,39 +1,17 @@
 // server/index.js
 import express from 'express';
+import morgan from 'morgan';
 import cors from 'cors';
-import hourlyRouter from './routes-hourly.js';
+import { eveningRouter } from './routes-evening.js';
 
-
-// Start Express
 const app = express();
-app.use(hourlyRouter);
 app.use(cors());
 app.use(express.json());
+app.use(morgan('dev'));
 
-// Root – liten översikt så vi vet att servern lever
-app.get('/', (req, res) => {
-  res.json({
-    ok: true,
-    routes: [
-      'GET /api/evening?location=Umeå',
-      'GET /api/evening?lat=63.8258&lon=20.263',
-    ],
-  });
-});
+app.use('/api', eveningRouter);
 
-// --- Mounta våra API-routes ---
-import eveningRouter from './routes-evening.js';
-app.use('/api/evening', eveningRouter);
-
-// (valfritt) behåll dina andra routes om du har dem
-// import currentRouter from './routes-forecast-current.js';
-// app.use('/api/forecast/current', currentRouter);
-
-// import hourlyRouter from './routes-forecast-hourly.js';
-// app.use('/api/forecast/hourly', hourlyRouter);
-
-// Starta
-const PORT = process.env.PORT || 8787;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`API running on http://localhost:${PORT}`);
+  console.log(`[aurora-api] listening on http://localhost:${PORT}`);
 });

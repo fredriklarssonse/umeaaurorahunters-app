@@ -36,9 +36,9 @@
 		"repo:dry": "node repo-migrations/0001_reorg.js",
 		"repo:migrate": "node repo-migrations/0001_reorg.js --apply",
 		"tonight:all": "node -r dotenv/config scripts/update-tonight-all.js --all",
-  		"tonight:umea": "node -r dotenv/config scripts/update-tonight-all.js --name \"Umeå\" --lat 63.8258 --lon 20.263",
-		"repo:dry2":   "node repo-migrations/0002_modularize.js --dry",
-    	"repo:apply2": "node repo-migrations/0002_modularize.js --apply"
+		"tonight:umea": "node -r dotenv/config scripts/update-tonight-all.js --name \"Umeå\" --lat 63.8258 --lon 20.263",
+		"repo:dry2": "node repo-migrations/0002_modularize.js --dry",
+		"repo:apply2": "node repo-migrations/0002_modularize.js --apply"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -46,10 +46,13 @@
 		"@sveltejs/adapter-auto": "^6.0.0",
 		"@sveltejs/kit": "^2.22.0",
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",
+		"autoprefixer": "^10.4.21",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
 		"globals": "^16.0.0",
+		"postcss-import": "^16.1.1",
+		"postcss-nesting": "^13.0.2",
 		"prettier": "^3.4.2",
 		"prettier-plugin-svelte": "^3.3.3",
 		"svelte": "^5.0.0",
@@ -61,7 +64,11 @@
 		"dotenv": "^17.2.1",
 		"express": "^5.1.0",
 		"geotiff": "^2.1.4-beta.0",
+		"morgan": "^1.10.1",
 		"node-fetch": "^3.3.2",
-		"suncalc": "^1.9.0"
+		"pg": "^8.16.3",
+		"pg-connection-string": "^2.9.1",
+		"suncalc": "^1.9.0",
+		"uplot": "^1.6.32"
 	}
 }

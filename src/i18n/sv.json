@@ -1,0 +1,22 @@
+{
+  "ui.loading": "Laddar…",
+  "ui.api.error.internal": "Ett fel inträffade",
+  "ui.location.label": "Plats",
+  "ui.coords.latlon": "ui.coords.latlon", 
+  "ui.now.label": "Nu",
+  "ui.now.potential": "Potential",
+  "ui.now.visibility": "Sikt",
+  "ui.tonight.chart.title": "ui.tonight.chart.title",
+  "ui.axis.time": "Tid",
+  "ui.axis.score0_10": "0–10",
+  "ui.series.potential": "Potential",
+  "ui.series.visibility": "Sikt",
+  "ui.tooltip.potential": "ui.tooltip.potential",
+  "ui.tooltip.visibility": "ui.tooltip.visibility",
+  "ui.card.bestWindow": "Bästa fönster",
+  "ui.card.bestWindow.value": "ui.card.bestWindow.value",
+  "ui.card.potentialPeak": "Topppotential",
+  "ui.card.visibilityPeak": "Bästa sikt",
+  "ui.legend.potential_visibility_explainer": "ui.legend.potential_visibility_explainer",
+  "ui.no_data": "Ingen data"
+}
