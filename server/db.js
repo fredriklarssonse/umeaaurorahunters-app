@@ -1,42 +1,21 @@
 // server/db.js
-import pg from 'pg';
-import { parse } from 'pg-connection-string';
+// En enda ingång till Postgres-poolen + hjälpfunktioner
 
-const { Pool } = pg;
+import { getPool } from './db/index.js';
 
-const raw = process.env.DATABASE_URL || '';
-if (!raw) {
-  console.warn('[db] DATABASE_URL saknas – DB kommer inte vara tillgänglig');
-}
-
-const cfg = raw ? parse(raw) : {};
-
-// Supabase kräver SSL.
-// rejectUnauthorized:false är normalt ok i dev (Supabase har giltigt cert ändå).
-const ssl =
-  process.env.PGSSL === 'disable'
-    ? false
-    : { rejectUnauthorized: false };
-
-export const pool = raw
-  ? new Pool({
-      host: cfg.host,
-      port: cfg.port ? Number(cfg.port) : 5432,
-      database: cfg.database || 'postgres',
-      user: cfg.user || 'postgres',
-      password: cfg.password,
-      max: 4,
-      idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 5_000,
-      keepAlive: true,
-      ssl
-    })
-  : null;
-
-// Hjälp-funktion som ger tydligare fel om pool saknas
-export async function dbQuery(sql, params = []) {
-  if (!pool) {
-    throw new Error('DB_NOT_CONFIGURED');
-  }
+/** Kör valfri SQL med parametrar. Returnerar pg.Result */
+export async function query(sql, params = []) {
+  const pool = getPool();
   return pool.query(sql, params);
 }
+
+/** Hämtar exakt en rad (eller null). Kastar om >1 rad. */
+export async function one(sql, params = []) {
+  const { rows } = await query(sql, params);
+  if (rows.length === 0) return null;
+  if (rows.length > 1) throw new Error('Expected exactly one row, got ' + rows.length);
+  return rows[0];
+}
+
+/** Exponera pool vid behov (diagnostik etc.) */
+export { getPool };

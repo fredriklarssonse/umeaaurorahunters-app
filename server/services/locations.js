@@ -1,27 +1,43 @@
 // server/services/locations.js
-import { one, query } from '../db/client.js';
+import { one, query } from '../db.js';
 
-/** Hämtar första aktiverade plats (fallback: Umeå) */
+/** Hämta default-plats (Umeå) — lagras i aurora_locations */
 export async function getDefaultLocation() {
-  const rows = await query(
-    `SELECT id, name, lat, lon
-     FROM public.aurora_locations
-     WHERE enabled = true
-     ORDER BY created_at ASC
-     LIMIT 1`
+  // Först: explicit lookup på Umeå (om finns)
+  const umea = await one(
+    `select id, name, lat, lon from aurora_locations
+     where enabled = true and lower(name) = lower($1)
+     limit 1`,
+    ['Umeå']
   );
-  if (rows.length) return rows[0];
-  return { id: null, name: 'Umeå', lat: 63.8258, lon: 20.263 };
+  if (umea) return umea;
+
+  // Fallback: första enabled
+  const row = await one(
+    `select id, name, lat, lon from aurora_locations
+     where enabled = true
+     order by created_at asc
+     limit 1`
+  );
+  return row;
 }
 
-/** Hitta närmaste location via lat/lon (PostGIS) */
-export async function getNearestLocation({ lat, lon }) {
-  const sql = `
-    SELECT id, name, lat, lon
-    FROM public.aurora_locations
-    WHERE enabled = true
-    ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
-    LIMIT 1
-  `;
-  return await one(sql, [lon, lat]);
+/** Hämta plats via id */
+export async function getLocationById(id) {
+  return one(
+    `select id, name, lat, lon
+     from aurora_locations
+     where id = $1`,
+    [id]
+  );
+}
+
+/** Lista platser (enkelt API) */
+export async function listLocations() {
+  const { rows } = await query(
+    `select id, name, lat, lon, enabled
+     from aurora_locations
+     order by name asc`
+  );
+  return rows;
 }

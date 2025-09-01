@@ -1,55 +1,105 @@
 // server/routes-evening.js
 import express from 'express';
 import { fetchEveningInputs } from './services/evening-inputs.js';
+import { buildEveningPayload } from './services/evening-payload.js'; // samma som tidigare (den du använde)
+import { formatApiOk, formatApiErr } from '../src/lib/api/format-response.js'; // oförändrat
 
-export const eveningRouter = express.Router();
+export const router = express.Router();
 
-// Dev: slå av cache i svar (annars 304 i dev kan förvirra)
-eveningRouter.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
-  next();
-});
+/**
+ * Plocka ut solens höjd (degrees) ur varje timsteg om den finns.
+ */
+function getSunAltDegFromPoint(p) {
+  if (!p?.breakdown?.visibility) return undefined;
+  const tw = p.breakdown.visibility.find((it) => it?.code === 'breakdown.twilight');
+  return tw?.params?.elevationDeg;
+}
 
-// Enkel mock om ?mock=1 eller om DB fallerar
-eveningRouter.get('/evening', async (req, res) => {
-  const mock = req.query.mock === '1' || process.env.AURORA_FORCE_MOCK === '1';
+/**
+ * Trimma timeline till “kvällens fönster”:
+ * - Primärt tar vi timmar där solen ≤ -6° (nautisk skymning eller mörkare).
+ * - Minst 6 timmar: om färre än 6 finns, välj 6 timmar centrerat kring “mörkast” (lägst solhöjd).
+ * - Om ingen solinfo finns → lämna original orört.
+ */
+function windowToEvening(timeline, minHours = 6) {
+  if (!Array.isArray(timeline) || timeline.length === 0) return timeline;
 
-  const fallback = () => {
-    const base = new Date();
-    const hours = Array.from({ length: 9 }, (_, i) => {
-      const ts = new Date(base.getTime() + i * 3600_000);
-      return {
-        ts: ts.toISOString(),
-        potential: [0.7, 1.1, 1.5, 1.5, 1.1, 1.1, 1.1, 1.1, 1.1][i] ?? 1.1,
-        visibility: [0.4, 1, 4.7, 7.4, 9, 9.2, 8.1, 5.8, 2.4][i] ?? 5,
-        breakdown: {
-          visibility: [
-            { code: 'breakdown.twilight', params: { elevationDeg: -6 - i * 2 } },
-            { code: 'breakdown.moon', params: { illum: 0.55 + i * 0.01, altDeg: -2 - i * 5 } },
-            { code: 'breakdown.clouds', params: { low: (i % 3) / 3, mid: ((i + 1) % 3) / 3, high: ((i + 2) % 3) / 3 } }
-          ]
-        }
-      };
-    });
+  const withSun = timeline.map((p, i) => ({
+    i,
+    sunAlt: getSunAltDegFromPoint(p),
+  }));
 
-    return res.json({
-      location: { name: 'Umeå', lat: 63.8258, lon: 20.263 },
-      now: { potential: 1.1, visibility: 5, i18n: { potential: 'forecast.potential.very_low', visibility: 'forecast.visibility.moderate' } },
-      timeline: hours,
-      observed: [],
-      meta: { version: 1, unit: 'score0_10', degraded: true, tag: 'simple-mock-v1' }
-    });
-  };
+  const hasAnySun = withSun.some((x) => typeof x.sunAlt === 'number');
+  if (!hasAnySun) {
+    // Saknar solinfo – returnera original
+    return timeline;
+  }
 
-  if (mock) return fallback();
+  // Filtrera på sol ≤ -6°
+  const nightIdx = withSun
+    .filter((x) => typeof x.sunAlt === 'number' && x.sunAlt <= -6)
+    .map((x) => x.i);
 
+  let idxs = nightIdx;
+
+  // Se till att vi har minst minHours
+  if (idxs.length < minHours) {
+    // Hitta mörkast timme (lägst solhöjd)
+    const darkest = withSun
+      .filter((x) => typeof x.sunAlt === 'number')
+      .reduce((best, cur) => (cur.sunAlt < best.sunAlt ? cur : best), { i: 0, sunAlt: 999 });
+
+    const center = darkest.i;
+    const half = Math.floor(minHours / 2);
+    let start = Math.max(0, center - half);
+    let end = start + minHours - 1;
+    if (end >= timeline.length) {
+      end = timeline.length - 1;
+      start = Math.max(0, end - minHours + 1);
+    }
+
+    idxs = Array.from({ length: end - start + 1 }, (_, k) => start + k);
+  }
+
+  const trimmed = idxs.map((i) => timeline[i]);
+
+  // Om api vill bära med tagg om vi kapat → markera (valfritt)
+  return trimmed;
+}
+
+router.get('/api/evening', async (req, res) => {
   try {
-    const payload = await fetchEveningInputs({ lat: 63.8258, lon: 20.263 });
-    return res.json(payload);
+    const useMock = String(req.query.mock || '').toLowerCase() === '1';
+
+    // 1) Hämta inputs (DB eller mock)
+    let inputs;
+    try {
+      inputs = await fetchEveningInputs({ useMock });
+    } catch (err) {
+      console.error('fetchEveningInputs error', err);
+      if (!useMock) {
+        // fallback till mock-läge
+        inputs = await fetchEveningInputs({ useMock: true });
+        console.warn('[evening] DB fel — faller tillbaka till mock:', err?.code || err?.message);
+      } else {
+        throw err;
+      }
+    }
+
+    // 2) Bygg payload som tidigare
+    let payload = buildEveningPayload(inputs); // { location, now, timeline, observed, meta }
+
+    // 3) Justera tidsfönstret till kvällens timmar (minst 6)
+    if (Array.isArray(payload?.timeline) && payload.timeline.length > 0) {
+      const trimmed = windowToEvening(payload.timeline, 6);
+      payload = { ...payload, timeline: trimmed };
+    }
+
+    return res.json(formatApiOk(payload));
   } catch (err) {
-    console.warn('[evening] DB fel — faller tillbaka till mock:', err?.code || err?.message || err);
-    return fallback();
+    console.error('evening route error', err);
+    return res
+      .status(500)
+      .json(formatApiErr('api.error.internal', { message: err?.message || 'unknown' }));
   }
 });
