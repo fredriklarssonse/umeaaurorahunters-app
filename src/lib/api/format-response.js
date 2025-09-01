@@ -60,3 +60,28 @@ function mapVisibilityKey(v) {
 function round1(n) {
   return Math.round(Number(n) * 10) / 10;
 }
+
+// src/lib/api/format-response.js
+
+/**
+ * Format a successful API response
+ */
+export function formatApiOk(data) {
+  return {
+    ok: true,
+    time: new Date().toISOString(),
+    ...data
+  };
+}
+
+/**
+ * Format an error API response
+ */
+export function formatApiErr(error, details = {}) {
+  return {
+    ok: false,
+    time: new Date().toISOString(),
+    error,
+    details
+  };
+}

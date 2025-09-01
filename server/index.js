@@ -2,19 +2,29 @@
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
-import { router as evening } from './routes-evening.js';
+
+import evening from './routes-evening.js'; // default-exporten
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-app.use('/api', evening);
+// Health-check
+app.get('/healthz', (_req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
+});
 
-// health
-app.get('/api/healthz', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+// Mounta routern (den innehåller GET /api/evening)
+app.use(evening);
 
-const PORT = process.env.API_PORT || 3000;
+// Fallback 404 (för att se tydligt vad som saknas)
+app.use((_req, res) => {
+  res.status(404).send('Not found');
+});
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`[aurora-api] listening on http://localhost:${PORT}`);
 });
