@@ -1,6 +1,7 @@
+// src/lib/ui/tonight/utils.ts
 // Gemensamma typer & hjälpare för tonight-lagren
 
-// Re-export så befintliga imports från './util' fortsätter fungera
+// Re-export så befintliga imports från './utils' fortsätter fungera
 export type { TimelinePoint, Dims } from './types';
 
 export const PAD = { l: 24, r: 24, t: 16, b: 28 };
@@ -75,7 +76,7 @@ export function seededRandom(seed: number) {
   };
 }
 
-// ————— Plocka sol/måne-data —————
+// ————— Plocka sol/måne-data från breakdown —————
 export function getSkyParams(p: any): { sunAlt?: number; moonAlt?: number; moonIllum?: number } {
   let sunAlt, moonAlt, moonIllum;
   const visArr = p?.breakdown?.visibility;
@@ -107,14 +108,91 @@ export function moonAttenuation(moonAltDeg?: number, moonIllum?: number): number
 }
 
 // ————— Plocka molnvärden (direkt eller via breakdown.visibility) —————
-export function getCloudParams(p: any): { low?: number; mid?: number; high?: number } | null {
+export function getCloudParams(p: any): { low?: number; mid?: number; high?: number; total01?: number } | null {
+  // Direkt struktur (om ni matat in breakdown.clouds som objekt)
   const direct = (p?.breakdown as any)?.clouds;
-  if (direct && (isNum(direct.low) || isNum(direct.mid) || isNum(direct.high))) return direct;
+  if (direct && (isNum(direct.low) || isNum(direct.mid) || isNum(direct.high) || isNum(direct.total01))) {
+    return direct;
+  }
 
+  // Via visibility-listan, t.ex. { code: 'breakdown.clouds', params: { total01 } }
   const visArr = p?.breakdown?.visibility;
   if (Array.isArray(visArr)) {
     const clouds = visArr.find((it: any) => it?.code === 'breakdown.clouds')?.params;
-    if (clouds && (isNum(clouds.low) || isNum(clouds.mid) || isNum(clouds.high))) return clouds;
+    if (clouds && (isNum(clouds.low) || isNum(clouds.mid) || isNum(clouds.high) || isNum(clouds.total01))) {
+      return clouds;
+    }
   }
   return null;
 }
+
+// ============= Twilight & DB-adapter =============
+
+export type TwilightKey =
+  | 'astronomy.twilight.civil'
+  | 'astronomy.twilight.nautical'
+  | 'astronomy.twilight.astronomical'
+  | 'astronomy.twilight.astro_dark';
+
+// Opacity för platta (samma steg som i SQL)
+// src/lib/ui/tonight/utils.ts
+export function twilightAlpha(key: TwilightKey | null): number {
+  if (!key) return 0;
+  switch (key) {
+    case 'astronomy.twilight.civil':        return 0.25;
+    case 'astronomy.twilight.nautical':     return 0.55;
+    case 'astronomy.twilight.astronomical': return 0.80;
+    case 'astronomy.twilight.astro_dark':   return 0.95;
+  }
+}
+
+
+// Intern helper: sun_alt -> twilight-key
+function twilightKeyFromSunAlt(sunAlt: number): TwilightKey | null {
+  if (sunAlt >= 0) return null;
+  if (sunAlt <= -18) return 'astronomy.twilight.astro_dark';
+  if (sunAlt <= -12) return 'astronomy.twilight.astronomical';
+  if (sunAlt <= -6)  return 'astronomy.twilight.nautical';
+  return 'astronomy.twilight.civil';
+}
+
+// HH:mm
+export function toHourLabel(tsLocal: string): string {
+  return tsLocal?.slice?.(11, 16) ?? '';
+}
+
+// DB rows → TimelinePoint[] (tidsrad i ert UI-format)
+// OBS: vi importerar TimelinePoint från './types' (inte definierar en ny här)
+import type { TimelinePoint } from './types';
+
+export function mapDbRowsToTimeline(rows: any[]): TimelinePoint[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter(r => (typeof r.sun_alt === 'number' ? r.sun_alt < 0 : true)) // filtrera bort dag
+    .map(r => {
+      const ts = r.ts_local ?? r.ts_utc ?? r.ts;
+      const vis: TimelinePoint['breakdown']['visibility'] = [];
+
+      // twilight
+      if (typeof r.sun_alt === 'number') {
+        const key = twilightKeyFromSunAlt(r.sun_alt);
+        if (key) vis.push({ code: 'breakdown.twilight', params: { key, elevationDeg: r.sun_alt } });
+      }
+      // moon
+      if (r.moon_alt != null || r.moon_illum != null) {
+        vis.push({ code: 'breakdown.moon', params: { altDeg: r.moon_alt ?? null, illum: r.moon_illum ?? null } });
+      }
+      // clouds (0..100 → 0..1 i total01)
+      if (typeof r.cloud === 'number') {
+        const total01 = Math.max(0, Math.min(1, r.cloud > 1 ? r.cloud / 100 : r.cloud));
+        vis.push({ code: 'breakdown.clouds', params: { total01 } });
+      }
+      // KP
+      if (typeof r.kp === 'number') {
+        vis.push({ code: 'breakdown.kp', params: { kp: r.kp } });
+      }
+
+      return { ts, breakdown: { visibility: vis } } as TimelinePoint;
+    });
+}
+

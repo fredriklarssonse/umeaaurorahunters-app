@@ -1,70 +1,48 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import type { TimelinePoint, Dims } from './types';
-  import { scaleX } from './layers/util';
-  import { drawSkyBackground, drawHourGridAndLabels } from './layers/sky';
-  import { drawCloudBands } from './layers/clouds';
-  import { drawCurves } from './layers/curves';
+  import type { TimelinePoint } from './utils';
+  import { mapDbRowsToTimeline } from './utils';
+  import { drawSkyBase } from './layers/sky';
 
-  export let timeline: TimelinePoint[] = [];
-  export let width = 980;
-  export let height = 440;
+  export let rowsFromDb: any[] = []; // <-- props: rows från RPC bundle (data.rows)
+  let timeline: TimelinePoint[] = [];
 
+  let host: HTMLDivElement;
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D | null = null;
-  let raf = 0;
+  let ro: ResizeObserver | null = null;
 
-  const PAD = { l: 24, r: 24, t: 16, b: 28 };
-
-  function draw() {
-    if (!ctx || !canvas) return;
-
+  function render() {
+    if (!ctx) return;
+    const { width, height } = host.getBoundingClientRect();
+    // hiDPI – enkel
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
     ctx.clearRect(0, 0, width, height);
 
-    const n = timeline.length;
-    if (n < 2) return;
-
-    const dims: Dims = { width, height, pad: PAD };
-    const xs = Array.from({ length: n }, (_, i) => scaleX(dims, n, i));
-
-    // Ordning: himmel → rutnät → moln → kurvor
-    drawSkyBackground(ctx, timeline, xs, dims);
-    drawHourGridAndLabels(ctx, timeline, xs, dims);
-    drawCloudBands(ctx, timeline, xs, dims);
-    drawCurves(ctx, timeline, xs, dims);
+    // Baslager: tidslinje + plattor + stjärnor
+    drawSkyBase(ctx, timeline, Math.max(1, width), Math.max(1, height), {
+      showStars: true,
+      axisHeight: 24,
+    });
   }
 
-  function schedule() {
-    cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(draw);
-  }
+  $: (timeline = mapDbRowsToTimeline(rowsFromDb), render());
 
   onMount(() => {
     ctx = canvas.getContext('2d');
-    schedule();
-    const onResize = () => schedule();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    ro = new ResizeObserver(render);
+    ro.observe(host);
+    render();
   });
 
-  $: timeline, schedule();
-  $: width, height, schedule();
-  onDestroy(() => cancelAnimationFrame(raf));
+  onDestroy(() => ro?.disconnect());
 </script>
 
-<canvas bind:this={canvas}></canvas>
-
-<style>
-  :global(canvas) {
-    display: block;
-    width: 100%;
-    border-radius: 12px;
-  }
-</style>
+<div bind:this={host} class="w-full h-60 relative">
+  <canvas bind:this={canvas} class="block w-full h-full"></canvas>
+</div>

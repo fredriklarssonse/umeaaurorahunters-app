@@ -1,6 +1,6 @@
 // src/lib/ui/tonight/layers/clouds.ts
 import type { TimelinePoint, Dims } from '../types';
-import { clamp01, pathSmooth } from './util';
+import { clamp01, pathSmooth } from './utils';
 
 function getCloudParams(p: TimelinePoint): { low?: number; mid?: number; high?: number } {
   // Casta breakdown till any för att acceptera både "direct clouds" och via visibility[]

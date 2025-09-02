@@ -1,126 +1,113 @@
-// src/lib/ui/tonight/layers/sky.ts
-import type { TimelinePoint, Dims } from '../types';
-import { isNum, mix, seededRandom, hourBandX } from './util';
+// --- src/lib/ui/tonight/layers/sky.ts --------------------------------
 
-// plockar twilight/moon parametrar
-export function getSkyParams(p: TimelinePoint): { sunAlt?: number; moonAlt?: number; moonIllum?: number } {
-  let sunAlt, moonAlt, moonIllum;
-  const visArr = p?.breakdown?.visibility;
-  if (Array.isArray(visArr)) {
-    const tw = visArr.find((it) => it?.code === 'breakdown.twilight')?.params as any;
-    if (tw && isNum(tw?.elevationDeg)) sunAlt = tw.elevationDeg;
-    const moon = visArr.find((it) => it?.code === 'breakdown.moon')?.params as any;
-    if (moon) {
-      if (isNum(moon?.altDeg))  moonAlt = moon.altDeg;
-      if (isNum(moon?.illum))   moonIllum = moon.illum;
-    }
-  }
-  return { sunAlt, moonAlt, moonIllum };
+
+import type { TimelinePoint } from './types';    // <— ändra till ./types
+import { twilightAlpha } from './utils';        // denna ska finnas kvar
+
+// Hämta twilight-nyckel om den finns i breakdown
+function getTwilightKey(p: TimelinePoint): string | null {
+  const b = p.breakdown?.visibility ?? [];
+  const tw = b.find(x => x.code === 'breakdown.twilight');
+  return (tw?.params as any)?.key ?? null;
 }
 
-export function darknessFromSun(sunAltDeg?: number): number {
-  if (!isNum(sunAltDeg)) return 0.5;
-  if (sunAltDeg >= -6)  return 0;
-  if (sunAltDeg <= -18) return 1;
-  return (-(sunAltDeg) - 6) / 12;
+// Hämta hour label (om ni redan beräknar den tidigare i pipen; annars "HH:mm")
+function hourLabelFromTs(ts: string): string {
+  return ts.slice(11, 16); // "YYYY-MM-DD HH:mm:ss" -> "HH:mm"
 }
 
-export function moonAttenuation(moonAltDeg?: number, moonIllum?: number): number {
-  if (!isNum(moonAltDeg) || !isNum(moonIllum)) return 0;
-  if (moonAltDeg <= 0) return 0;
-  const altFactor = Math.min(1, moonAltDeg / 50);
-  return Math.max(0, Math.min(1, moonIllum * altFactor));
-}
-
-// Stjärnor över hela höjden, fler upptill
-function drawStarsGradient(
+// Baslager: rita plattor med opacity från twilight + stjärnor efter mörkergrad
+export function drawSkyBase(
   ctx: CanvasRenderingContext2D,
-  x0: number, x1: number, y0: number, y1: number,
-  total: number, rnd: () => number
+  timeline: TimelinePoint[],
+  width: number,
+  height: number,
+  opts: { showStars?: boolean; axisHeight?: number } = {}
 ) {
-  if (total <= 0) return;
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  if (!timeline.length) return;
 
-  const bands = 6;
-  const bandH = (y1 - y0) / bands;
-  const weights = Array.from({ length: bands }, (_, bi) => {
-    const t = bi / (bands - 1);  // 0 top..1 bottom
-    return 1 - 0.7 * t;
-  });
-  const wSum = weights.reduce((a, b) => a + b, 0);
-  let remaining = total;
+  const axisH = Math.max(20, opts.axisHeight ?? 24);
+  const plotH = height - axisH;
+  const colW = width / timeline.length;
 
-  for (let bi = 0; bi < bands; bi++) {
-    const share = Math.round((weights[bi] / wSum) * total);
-    const count = (bi === bands - 1) ? remaining : Math.min(share, remaining);
-    remaining -= count;
+  // 1) Bakgrundsplattor
+  for (let i = 0; i < timeline.length; i++) {
+    const key = getTwilightKey(timeline[i]);
+    const alpha = twilightAlpha(key as any);
+    if (alpha <= 0) continue;
 
-    const yy0 = y0 + bi * bandH;
-    const yy1 = yy0 + bandH;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#000000'; // faktisk färg/tema sätts i appen via compositing
+    ctx.fillRect(Math.floor(i * colW), 0, Math.ceil(colW) + 1, plotH);
+  }
+  ctx.globalAlpha = 1;
 
-    for (let i = 0; i < count; i++) {
-      const x = x0 + rnd() * (x1 - x0);
-      const y = yy0 + rnd() * (yy1 - yy0);
-      const r = 0.6 + rnd() * 0.9;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
+  // 2) Stjärnor (fler ju mörkare). Enkel PRNG för determinism utan lib.
+  if (opts.showStars !== false) {
+    function rand(seed: number) {
+      let t = seed + 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+
+    for (let i = 0; i < timeline.length; i++) {
+      const key = getTwilightKey(timeline[i]) as any;
+      const a = twilightAlpha(key);
+      // normalisera 0.25..0.95 -> 0..1 för densitet
+      const density = Math.max(0, Math.min(1, (a - 0.25) / (0.95 - 0.25)));
+      const maxStarsPerCol = 40;
+      const n = Math.floor(density * maxStarsPerCol);
+
+      for (let s = 0; s < n; s++) {
+        const seed = i * 8191 + s * 131;
+        const rx = rand(seed);
+        const ry = rand(seed + 1);
+        const rsz = rand(seed + 2);
+        const x = i * colW + rx * colW;
+        const y = ry * (plotH - 2) + 1;
+        const size = 0.5 + rsz * 1.5;
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillRect(x, y, size, size);
+      }
     }
   }
-  ctx.restore();
-}
 
-export function drawSkyBackground(ctx: CanvasRenderingContext2D, timeline: TimelinePoint[], xs: number[], dims: Dims) {
-  const yTop = dims.pad.t;
-  const yBot = dims.height - dims.pad.b;
-
-  for (let i = 0; i < timeline.length; i++) {
-    const { x0, x1 } = hourBandX(xs, i, dims);
-    const p = timeline[i];
-    const { sunAlt, moonAlt, moonIllum } = getSkyParams(p);
-    const dark = darknessFromSun(sunAlt);
-    const moonAtt = moonAttenuation(moonAlt, moonIllum);
-    const darkEff = Math.max(0, dark * (1 - 0.7 * moonAtt));
-
-    const dayRGB = [40, 48, 64];
-    const nightRGB = [7, 10, 22];
-    const t = darkEff;
-    const r = Math.round(mix(dayRGB[0], nightRGB[0], t));
-    const g = Math.round(mix(dayRGB[1], nightRGB[1], t));
-    const b = Math.round(mix(dayRGB[2], nightRGB[2], t));
-
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.fillRect(x0, yTop, x1 - x0 + 1, yBot - yTop);
-
-    // stjärnor efter mörker & måndämpning
-    const seed = new Date(p.ts).getTime() >>> 0;
-    const rnd = seededRandom(seed);
-    const baseStars = 140;
-    const starFactor = Math.max(0, dark * (1 - moonAtt * 0.9));
-    const starCount = Math.round(baseStars * starFactor);
-    drawStarsGradient(ctx, x0, x1, yTop, yBot, starCount, rnd);
-  }
-}
-
-export function drawHourGridAndLabels(ctx: CanvasRenderingContext2D, timeline: TimelinePoint[], xs: number[], dims: Dims) {
-  const labelY = dims.height - 7;
+  // 3) Tidsaxel (HH:mm) + ticks
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.6;
 
-  for (let i = 0; i < xs.length; i++) {
+  const axisTop = plotH + 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, axisTop);
+  ctx.lineTo(width, axisTop);
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.9;
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  const tickEvery = Math.max(1, Math.floor(timeline.length / 10)); // ungefär 8–12 etiketter
+  for (let i = 0; i < timeline.length; i++) {
+    if (i % tickEvery !== 0) continue;
+    const cx = i * colW + colW / 2;
+
+    // tick
+    ctx.globalAlpha = 0.6;
     ctx.beginPath();
-    ctx.moveTo(xs[i], dims.pad.t);
-    ctx.lineTo(xs[i], dims.height - dims.pad.b);
+    ctx.moveTo(Math.round(i * colW) + 0.5, plotH);
+    ctx.lineTo(Math.round(i * colW) + 0.5, plotH + 4);
     ctx.stroke();
 
-    const hour = new Date(timeline[i].ts);
-    const hh = hour.getHours().toString().padStart(2, '0');
-    ctx.fillStyle = 'rgba(229,231,235,0.8)';
-    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial';
-    ctx.textAlign = (i === 0) ? 'left' : (i === xs.length - 1 ? 'right' : 'center');
-    ctx.fillText(hh, xs[i], labelY);
+    // text
+    ctx.globalAlpha = 0.9;
+    const label = hourLabelFromTs(timeline[i].ts);
+    ctx.fillText(label, cx, plotH + 6);
   }
+
   ctx.restore();
 }

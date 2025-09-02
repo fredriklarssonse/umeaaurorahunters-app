@@ -1,6 +1,6 @@
 // src/lib/ui/tonight/layers/curves.ts
 import type { TimelinePoint, Dims } from '../types';
-import { isNum, pathSmooth } from './util';
+import { isNum, pathSmooth } from './utils';
 
 function cloudZoneH(h: number) { return Math.min(140, Math.max(90, h * 0.24)); }
 function cloudZone(dims: Dims) {

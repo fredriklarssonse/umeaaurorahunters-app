@@ -47,7 +47,7 @@
     "suncalc": "SunCalc",
     "fixed": "fast fönster"
   }, 
-  {
+  
   "forecast.potential.extreme": "ui.potential.extreme",
   "forecast.potential.high": "ui.potential.high",
   "forecast.potential.moderate": "ui.potential.moderate",
@@ -63,5 +63,4 @@
   "api.error.internal": "ui.api.error.internal"
 }
 
-}
 
